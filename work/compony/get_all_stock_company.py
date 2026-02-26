@@ -11,6 +11,8 @@ import warnings
 import os
 from pathlib import Path
 
+from work.compony.df_get_spot import get_stock_code_from_eastmoney
+
 warnings.filterwarnings("ignore")
 
 # 版本校验（确保≥1.18.0）
@@ -56,15 +58,10 @@ def get_all_stock_full_info_ak18(use_cache=True):
         print("【2/4】检测到缓存文件，直接读取实时市值+所属板块...")
         df_spot = pd.read_csv(spot_csv_path, encoding="utf-8-sig")
     else:
-        print("【2/4】获取实时市值+所属板块...")
-        # 1.18+版本字段变化：总市值→总市值_元，市场类型→板块
-        df_spot = ak.stock_zh_a_spot_em()
-        df_spot = df_spot.rename(columns={
-            "代码": "股票代码",
-            "总市值_元": "总市值(元)",  # 1.18+核心字段变化
-            "板块": "所属板块",  # 1.18+字段名调整（原市场类型）
-            "行业": "申万一级行业"
-        })[["股票代码", "总市值(元)", "所属板块", "申万一级行业"]]
+        print("【2/4】从东方财富网获取实时市值+所属板块...")
+        # 调用东方财富API（替代AkShare）
+        df_spot = get_stock_code_from_eastmoney()
+        # 保存缓存
         df_spot.to_csv(spot_csv_path, index=False, encoding="utf-8-sig")
     
     # -------------------------- 3. 批量获取：公司全称 + 上市日期 --------------------------
