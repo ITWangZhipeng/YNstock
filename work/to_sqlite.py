@@ -16,7 +16,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class StockDataToSQLite:
-    def __init__(self, db_path="stock_data.db", csv_directory="./compony/csv"):
+    def __init__(self, db_path="stock_data.db", csv_directory="./company/csv"):
         """
         初始化数据库导入器
         
@@ -242,7 +242,7 @@ def main():
     """主函数"""
     # 设置数据库路径和CSV目录
     db_path = "stock_data.db"
-    csv_directory = "./compony/csv"
+    csv_directory = "./company/csv"
     
     # 创建导入器实例
     importer = StockDataToSQLite(db_path=db_path, csv_directory=csv_directory)

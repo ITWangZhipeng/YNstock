@@ -11,7 +11,7 @@ import warnings
 import os
 from pathlib import Path
 
-from work.compony.df_get_spot import get_stock_code_from_eastmoney
+from work.company.df_get_spot import get_stock_code_from_eastmoney
 
 warnings.filterwarnings("ignore")
 
