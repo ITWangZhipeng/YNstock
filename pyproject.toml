@@ -11,4 +11,8 @@ dependencies = [
     "uvicorn>=0.41.0",
     "matplotlib>=3.8.0",
     "seaborn>=0.13.0",
+    "jqdatasdk>=1.9.8",
+    "python-dotenv>=1.0.0",
+    "websockets>=12.0",
+    "ipykernel>=7.2.0",
 ]
