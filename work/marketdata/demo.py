@@ -1,99 +1,63 @@
-import asyncio
-import websockets
-import json
-import time
-
-# -------------------------- 配置信息（新版核心修改） --------------------------
-JQ_TOKEN = "你的QuantApi Token"  # 替换为自己的Token
-WS_URL = "wss://push2.joinquant.com/websocket/quote"
-SUBSCRIBE_CODES = ["600519.XSHG", "000001.XSHE", "300750.XSHE"]
+from jqdata import *
 
 
-# -------------------------- WebSocket核心逻辑（移除get_auth_header） --------------------------
-async def jqdata_ws_quote():
-    """新版JQData WebSocket订阅实时行情（无get_auth_header）"""
-    # 1. 建立WebSocket连接
-    async with websockets.connect(WS_URL) as websocket:
-        print("✅ 已连接JQData WebSocket服务器")
+def initialize(context):
+    # 设定要操作的股票
+    g.security = '000001.XSHE'
 
-        # 2. 新版认证：直接用QuantApi Token登录（无需调用jqdatasdk.auth）
-        auth_params = {
-            "method": "login",
-            "params": {
-                "token": JQ_TOKEN,  # 直接填QuantApi Token
-                "user_agent": "jqdata_python/1.0",
-                "version": "1.0"
-            },
-            "id": int(time.time() * 1000)  # 请求ID（唯一）
-        }
-        await websocket.send(json.dumps(auth_params))
+    # 设置基准
+    set_benchmark('000300.XSHG')
 
-        # 接收认证响应
-        auth_resp = await websocket.recv()
-        auth_resp_dict = json.loads(auth_resp)
-        if auth_resp_dict.get("error") is None:
-            print("✅ JQData认证成功")
-        else:
-            print(f"❌ JQData认证失败：{auth_resp_dict['error']}")
-            return
+    # 开启动态复权
+    set_option('use_real_price', True)
 
-        # 3. 订阅行情（逻辑不变）
-        subscribe_params = {
-            "method": "subscribe",
-            "params": {
-                "codes": SUBSCRIBE_CODES,
-                "fields": [
-                    "last_price", "open_price", "high_price", "low_price",
-                    "pre_close", "volume", "amount", "total_market_value",
-                    "circulating_market_value", "timestamp"
-                ]
-            },
-            "id": int(time.time() * 1000) + 1
-        }
-        await websocket.send(json.dumps(subscribe_params))
-        print(f"✅ 已订阅股票：{SUBSCRIBE_CODES}")
-
-        # 4. 循环接收行情（逻辑不变）
-        print("\n📈 开始接收实时行情（按Ctrl+C停止）：")
-        while True:
-            try:
-                data = await websocket.recv()
-                data_dict = json.loads(data)
-
-                # 处理心跳包
-                if data_dict.get("method") == "ping":
-                    pong_params = {"method": "pong", "id": data_dict["id"]}
-                    await websocket.send(json.dumps(pong_params))
-                    continue
-
-                # 解析行情数据
-                if data_dict.get("params") and data_dict["params"].get("data"):
-                    quote_data = data_dict["params"]["data"]
-                    for code, fields in quote_data.items():
-                        print(f"\n【{code}】")
-                        print(f"  最新价：{fields.get('last_price', '-')} 元")
-                        print(
-                            f"  涨跌幅：{round((fields.get('last_price', 0) - fields.get('pre_close', 0)) / fields.get('pre_close', 1) * 100, 2)} %")
-                        print(f"  总市值：{fields.get('total_market_value', '-')} 元")
-                        print(f"  成交量：{fields.get('volume', '-')} 手")
-                        print(
-                            f"  时间戳：{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(fields.get('timestamp', 0) / 1000))}")
-
-            except websockets.exceptions.ConnectionClosed:
-                print("❌ WebSocket连接断开，正在重连...")
-                await asyncio.sleep(3)
-                await jqdata_ws_quote()
-                break
-            except KeyboardInterrupt:
-                print("\n🛑 用户终止，关闭WebSocket连接")
-                break
-            except Exception as e:
-                print(f"❌ 接收数据异常：{str(e)}")
-                continue
+    # 日志输出
+    log.info("策略初始化完成")
 
 
-if __name__ == "__main__":
-    try:
-        asyncio.run(jqdata_ws_quote())
-    except Exception as e:
-        print(f"❌ 程序异常：{str(e)}")
+# 方法1：使用 on_bar 回调 (推荐，系统会自动按频率推送)
+# 注意：需要在策略配置中选择频率为 "1m"
+def on_bar(context, bars):
+    """
+    bars: 当前分钟的行情数据对象
+    """
+    security = g.security
+
+    # 检查当前标的是否在bars中 (防止停牌等情况)
+    if security not in bars.index:
+        return
+
+    current_data = bars[security]
+
+    # 获取当前分钟的开盘、收盘、最高、最低、成交量
+    open_price = current_data.open
+    close_price = current_data.close
+    high_price = current_data.high
+    low_price = current_data.low
+    volume = current_data.volume
+
+    log.info(f"时间: {current_data.time}, 代码: {security}, 现价: {close_price}, 成交量: {volume}")
+
+    # --- 在此处编写你的交易逻辑 ---
+    # 例如：如果收盘价大于开盘价，则买入
+    # if close_price > open_price:
+    #     order_target(security, 100)
+
+
+# 方法2：如果你必须在策略中主动查询“过去N分钟”的数据用于计算指标
+def handle_data(context, data):
+    # 仅在交易时段运行，避免非交易时间报错
+    if context.current_dt.hour < 9 or (context.current_dt.hour == 9 and context.current_dt.minute < 30):
+        return
+
+    # 获取过去 5 分钟的 1分钟K线数据 (用于计算均线等)
+    # count: 获取多少根K线
+    # unit: 时间单位 '1m'
+    h_bars = attribute_history(g.security, count=5, unit='1m', fields=['close', 'volume'])
+
+    if len(h_bars) < 5:
+        return
+
+    # 计算简单的5分钟均价
+    avg_price = h_bars['close'].mean()
+    log.info(f"过去5分钟均价: {avg_price}")
